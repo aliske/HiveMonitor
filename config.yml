@@ -1,0 +1,8 @@
+external_sensor: '28-210ad446b487'
+hives:
+  - id: 1
+    internal_sensor: '28-292bd44548b0'
+    camera: True 
+  - id: 2
+    internal_sensor: False 
+    camera: False

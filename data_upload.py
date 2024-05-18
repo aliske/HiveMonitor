@@ -10,6 +10,7 @@ import os
 import glob
 import time
 import requests
+import yaml
 from datetime import datetime
 from PIL import Image
 from PIL import ImageDraw
@@ -25,6 +26,12 @@ os.system('modprobe w1-therm')
 
 base_dir = '/sys/bus/w1/devices/'
 device_folder = glob.glob(base_dir + '28*')
+
+with open('config.yml','r') as file:
+	data = yaml.load(file, Loader=yaml.SafeLoader)
+
+print('External Sensor:',data['external_sensor'])
+external_sensor = data['external_sensor']
 
 def read_temp_raw(device):
 	device_file = device + '/w1_slave'
@@ -43,50 +50,70 @@ def read_temp(device):
 		temp_string = lines[1][equals_pos+2:]
 		temp_c = float(temp_string) / 1000.0
 		return temp_c
-int_temp = 0.0
-ext_temp = 0.0
 
+ext_temp = 0.0
 for device in device_folder:
-	if(device == '/sys/bus/w1/devices/28-292bd44548b0'):
-		int_temp = read_temp(device)
-	else:
+	if(device == '/sys/bus/w1/devices/'+ external_sensor):
 		ext_temp = read_temp(device)
 
-print('Interior temperature (C):', int_temp)
-print('Exterior temperature (C):', ext_temp)
+for hives in data['hives']:
+	int_temp = 0.0
+	hive_id = str(hives['id'])
+	print('Hive ID:',hive_id)
 
-camera = PiCamera()
-time.sleep(5)
+	if hives['internal_sensor'] != False:
+		internal_sensor = hives['internal_sensor']
+		print('Internal Sensor:',hives['internal_sensor'])
+	else:
+		internal_sensor = False
+		print('No Internal Sensor Installed')
+
+	if internal_sensor != False:
+		for device in device_folder:
+			if(device == '/sys/bus/w1/devices/'+ internal_sensor):
+				int_temp = read_temp(device)
+
+	print('Interior temperature (C):', int_temp)
+	print('Exterior temperature (C):', ext_temp)
+	if(hives['camera'] == True):
+		camera = PiCamera()
+		time.sleep(5)
 #this line is optional.  It's necessary for the enclosure in my setup
-camera.zoom = (0.15,0.0,0.70,0.80)
-camera.capture(image_name)
-if(os.path.isfile(image_name)):
-	print('Image Captured')
-	img = Image.open(image_name)
-	#I1 = img.crop((100,0,0,100))
-	I1 = ImageDraw.Draw(img)
-	date_time_obj = 'Hive 1: ' + str(datetime.now())
-	myFont = ImageFont.truetype('FreeMono.ttf', 20)
-	I1.rectangle(((20,30),(450, 60)), fill="#cccccc")
-	I1.text((28, 36), date_time_obj, font=myFont, fill=(0,0,0))
-	I1.rectangle(((20,60),(325, 90)), fill="#cccccc")
-	temp_text = f'Int: {int_temp} Ext: {ext_temp}' 
-	I1.text((28, 68), temp_text, font=myFont, fill=(0,0,0))
-	img.save(image_name)
-else:
-	print('Failed to capture image')
-
-target_url = "https://aaronliske.com/bees/upload_data.php"
-
-target_file = open(image_name,"rb")
-response = requests.post(target_url, files = {"userImage":target_file}, data = {"int_temp" : int_temp, "ext_temp" : ext_temp})
-
-if response.ok:
-	print('Data Uploaded')
-	os.remove(image_name)
-	print('Local Image File Deleted')
-else:
-	print('Error during data upload')
+		camera.zoom = (0.15,0.0,0.70,0.80)
+		camera.capture(image_name)
+		if(os.path.isfile(image_name)):
+			print('Image Captured')
+			img = Image.open(image_name)
+			#I1 = img.crop((100,0,0,100))
+			I1 = ImageDraw.Draw(img)
+			date_time_obj = 'Hive ' + hive_id + ': ' + str(datetime.now())
+			myFont = ImageFont.truetype('FreeMono.ttf', 20)
+			I1.rectangle(((20,30),(450, 60)), fill="#cccccc")
+			I1.text((28, 36), date_time_obj, font=myFont, fill=(0,0,0))
+			I1.rectangle(((20,60),(325, 90)), fill="#cccccc")
+			temp_text = f'Int: {int_temp} Ext: {ext_temp}' 
+			I1.text((28, 68), temp_text, font=myFont, fill=(0,0,0))
+			img.save(image_name)
+		else:
+			print('Failed to capture image')
+	
+	target_url = "https://aaronliske.com/bees/upload_data.php"
+	
+	if hives['camera'] == True:
+		target_file = open(image_name,"rb")
+		response = requests.post(target_url, files = {"userImage":target_file}, data = {"int_temp" : int_temp, "ext_temp" : ext_temp, "hive" : hive_id})
+	else:
+		print('No Camera for this Hive')
+		target_file = open('no_camera.jpg',"rb")
+		response = requests.post(target_url, files = {"userImage":target_file}, data={"int_temp": int_temp, "ext_temp" : ext_temp, "hive": hive_id })
+	
+	if response.ok:
+		print('Data Uploaded')
+		if hives['camera'] == True:
+			os.remove(image_name)
+			print('Local Image File Deleted')
+	else:
+		print('Error during data upload')
 
 #try:
 #	hx711 = HX711 (
