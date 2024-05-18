@@ -3,8 +3,8 @@
 # April 2024
 # Todo:
 #  * HX711 support for quad load cells for weight monitoring
-#  * Options to dictate which is internal/external load cells
-#    - Currently hardcoded device ID
+
+
 
 import os
 import glob
